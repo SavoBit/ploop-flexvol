@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+	spath "path"
+	"strings"
 
 	"github.com/jaxxstorm/flexvolume"
 	"github.com/kolyshkin/goploop-cli"
@@ -136,6 +138,14 @@ func (p Ploop) Init() (*flexvolume.Response, error) {
 	}, nil
 }
 
+func (p Ploop) realWorkingDir(options map[string]string) string {
+	realDir := workingDir
+	if options["secretFromSystem"] == "true" {
+		realDir = os.Getenv("workingDir")
+	}
+	return realDir
+}
+
 func (p Ploop) path(options map[string]string) string {
 	path := "/"
 	if options["volumePath"] != "" {
@@ -229,6 +239,10 @@ func (p Ploop) Mount(target string, options map[string]string) (*flexvolume.Resp
 	if options["kubernetes.io/readwrite"] == "ro" {
 		readonly = true
 	}
+	if options["secretFromSystem"] == "true" {
+		options["kubernetes.io/secret/clusterName"] = os.Getenv("clusterName")
+		options["kubernetes.io/secret/clusterPassword"] = os.Getenv("clusterPassword")
+	}
 
 	if options["kubernetes.io/secret/clusterName"] != "" {
 		_cluster, err := base64.StdEncoding.DecodeString(options["kubernetes.io/secret/clusterName"])
@@ -243,7 +257,7 @@ func (p Ploop) Mount(target string, options map[string]string) (*flexvolume.Resp
 		}
 		passwd := string(_passwd)
 
-		mount := workingDir + cluster
+		mount := spath.Join(p.realWorkingDir(options),cluster)
 		if err := prepareVstorage(cluster, passwd, mount); err != nil {
 			return nil, err
 		}
@@ -309,8 +323,26 @@ func (p Ploop) Mount(target string, options map[string]string) (*flexvolume.Resp
 }
 
 func (p Ploop) Unmount(mount string) (*flexvolume.Response, error) {
-	if err := syscall.Unmount(mount, 0); err != nil {
+	// check if mountpoint exists
+	stat, err := os.Stat(mount)
+	if err != nil {
+		glog.Fatalf("Could not stat %s",mount)
 		return nil, err
+	}
+	// check if it is really a mountpoint, and skip umount if not. This is to allow the
+	// ploop volume to be cleaned up on retry.
+	rootStat, err := os.Lstat(filepath.Dir(strings.TrimSuffix(mount, "/")))
+	if err != nil {
+		glog.Fatalf("Could not stat parent dir of %s",mount)
+		return nil, err
+	}
+	if stat.Sys().(*syscall.Stat_t).Dev != rootStat.Sys().(*syscall.Stat_t).Dev {
+		if err := syscall.Unmount(mount, 0); err != nil {
+			glog.Infof("umount failed for %s",mount)
+			return nil, err
+		}
+	} else {
+		glog.Infof("Unmount of %s skipped because it's not mounted", mount)
 	}
 
 	mount = filepath.Clean(mount)
