@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
-	"strings"
 
 	"github.com/jaxxstorm/flexvolume"
 	"github.com/kolyshkin/goploop-cli"
