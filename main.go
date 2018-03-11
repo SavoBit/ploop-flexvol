@@ -326,7 +326,7 @@ func (p Ploop) Unmount(mount string) (*flexvolume.Response, error) {
 	if err == syscall.EINVAL {
 		//This isn't a mount point, continue and allow the ploop volume to be cleaned up on retry
 		glog.Infof("%s isn't a mount point",mount)
-	} elif err != nil {
+	} else if err != nil {
 		return nil, err
 	}
 
