@@ -246,7 +246,7 @@ func (p Ploop) Mount(target string, options map[string]string) (*flexvolume.Resp
 		clusterPassword = options["kubernetes.io/secret/clusterPassword"]
 	}
 
-	if options["kubernetes.io/secret/clusterName"] != "" {
+	if clusterName != "" {
 		_cluster, err := base64.StdEncoding.DecodeString(clusterName)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to decode a cluster name: %v", err.Error())
