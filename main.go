@@ -325,7 +325,11 @@ func (p Ploop) Mount(target string, options map[string]string) (*flexvolume.Resp
 }
 
 func (p Ploop) Unmount(mount string) (*flexvolume.Response, error) {
-	if err := syscall.Unmount(mount, 0); err != nil {
+	err := syscall.Unmount(mount, 0)
+	if err == syscall.EINVAL {
+		//This isn't a mount point, continue and allow the ploop volume to be cleaned up on retry
+		glog.Infof("%s isn't a mount point",mount)
+	} else if err != nil {
 		return nil, err
 	}
 
