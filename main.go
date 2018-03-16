@@ -136,6 +136,14 @@ func (p Ploop) Init() (*flexvolume.Response, error) {
 	}, nil
 }
 
+func (p Ploop) realWorkingDir(options map[string]string) string {
+	realDir := workingDir
+	if options["optionsFromSystem"] == "true" {
+		realDir = os.Getenv("kubeVstorageWorkingDir")
+	}
+	return realDir
+}
+
 func (p Ploop) path(options map[string]string) string {
 	path := "/"
 	if options["volumePath"] != "" {
@@ -223,27 +231,35 @@ func (p Ploop) umountPloop(statePath string) error {
 }
 
 func (p Ploop) Mount(target string, options map[string]string) (*flexvolume.Response, error) {
+	var clusterName, clusterPassword string
 	path := p.path(options)
 
 	readonly := false
 	if options["kubernetes.io/readwrite"] == "ro" {
 		readonly = true
 	}
+	if options["optionsFromSystem"] == "true" {
+		clusterName     = os.Getenv("kubeVstorageClusterName")
+		clusterPassword = os.Getenv("kubeVstorageClusterPassword")
+	}else{
+		clusterName     = options["kubernetes.io/secret/clusterName"]
+		clusterPassword = options["kubernetes.io/secret/clusterPassword"]
+	}
 
-	if options["kubernetes.io/secret/clusterName"] != "" {
-		_cluster, err := base64.StdEncoding.DecodeString(options["kubernetes.io/secret/clusterName"])
+	if clusterName != "" {
+		_cluster, err := base64.StdEncoding.DecodeString(clusterName)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to decode a cluster name: %v", err.Error())
 		}
 		cluster := string(_cluster)
 
-		_passwd, err := base64.StdEncoding.DecodeString(options["kubernetes.io/secret/clusterPassword"])
+		_passwd, err := base64.StdEncoding.DecodeString(clusterPassword)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to decode a cluster password: %v", err.Error())
 		}
 		passwd := string(_passwd)
 
-		mount := workingDir + cluster
+		mount := filepath.Join(p.realWorkingDir(options),cluster)
 		if err := prepareVstorage(cluster, passwd, mount); err != nil {
 			return nil, err
 		}
